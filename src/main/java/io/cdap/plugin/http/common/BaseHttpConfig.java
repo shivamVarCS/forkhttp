@@ -24,10 +24,13 @@ import io.cdap.cdap.etl.api.FailureCollector;
 import io.cdap.cdap.etl.api.validation.InvalidConfigPropertyException;
 import io.cdap.plugin.common.ReferencePluginConfig;
 import io.cdap.plugin.http.common.http.AuthType;
+import io.cdap.plugin.http.common.http.GrantType;
 import io.cdap.plugin.http.common.http.OAuthUtil;
 import org.apache.http.Header;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Optional;
@@ -67,6 +70,10 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
     public static final String PROPERTY_AUTO_DETECT_VALUE = "auto-detect";
 
     public static final String PROPERTY_SERVICE_ACCOUNT_SCOPE = "serviceAccountScope";
+    public static final String PROPERTY_GRANT_TYPE_LABEL = "Grant type";
+    public static final String PROPERTY_GRANT_TYPE = "grantType";
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(BaseHttpConfig.class);
+
 
     @Name(PROPERTY_AUTH_TYPE)
     @Description("Type of authentication used to submit request. \n" +
@@ -156,6 +163,11 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
             "for more information.")
     @Macro
     protected String serviceAccountScope;
+
+    @Nullable
+    @Name(PROPERTY_GRANT_TYPE)
+    @Description("Value of grant type to determine the OAuth mechanism")
+    protected String grantType;
 
     public BaseHttpConfig(String referenceName) {
         super(referenceName);
@@ -252,6 +264,10 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
     public String getServiceAccountScope() {
         return serviceAccountScope;
     }
+    @Nullable
+    public GrantType getGrantType() {
+        return GrantType.fromvalue(grantType);
+    }
 
     @Nullable
     public Boolean isServiceAccountJson() {
@@ -303,11 +319,15 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
         // Validate OAuth2 properties
         if (!containsMacro(PROPERTY_OAUTH2_ENABLED) && this.getOauth2Enabled()) {
             String reasonOauth2 = "OAuth2 is enabled";
-            assertIsSet(getAuthUrl(), PROPERTY_AUTH_URL, reasonOauth2);
+            //assertIsSet(getAuthUrl(), PROPERTY_AUTH_URL, reasonOauth2);
             assertIsSet(getTokenUrl(), PROPERTY_TOKEN_URL, reasonOauth2);
             assertIsSet(getClientId(), PROPERTY_CLIENT_ID, reasonOauth2);
             assertIsSet(getClientSecret(), PROPERTY_CLIENT_SECRET, reasonOauth2);
-            assertIsSet(getRefreshToken(), PROPERTY_REFRESH_TOKEN, reasonOauth2);
+            //assertIsSet(getRefreshToken(), PROPERTY_REFRESH_TOKEN, reasonOauth2);
+            if (getGrantType().equals(GrantType.REFRESH_TOKEN.getValue())) {
+                assertIsSet(getAuthUrl(), PROPERTY_AUTH_URL, reasonOauth2);
+                assertIsSet(getRefreshToken(), PROPERTY_REFRESH_TOKEN, reasonOauth2);
+            }
         }
 
         // Validate Authentication properties
@@ -315,9 +335,21 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
         switch (authType) {
             case OAUTH2:
                 String reasonOauth2 = "OAuth2 is enabled";
-                if (!containsMacro(PROPERTY_AUTH_URL)) {
+                /*if (!containsMacro(PROPERTY_AUTH_URL)) {
                     assertIsSet(getAuthUrl(), PROPERTY_AUTH_URL, reasonOauth2);
+                }*/
+                if (!containsMacro(PROPERTY_GRANT_TYPE)) {
+                    assertIsSet(getGrantType(), PROPERTY_GRANT_TYPE, reasonOauth2);
+                    if (getGrantType().equals(GrantType.REFRESH_TOKEN.getValue())) {
+                        if (!containsMacro(PROPERTY_REFRESH_TOKEN)) {
+                            assertIsSet(getRefreshToken(), PROPERTY_REFRESH_TOKEN, reasonOauth2);
+                        }
+                        if (!containsMacro(PROPERTY_AUTH_URL)) {
+                            assertIsSet(getAuthUrl(), PROPERTY_AUTH_URL, reasonOauth2);
+                        }
+                    }
                 }
+
                 if (!containsMacro(PROPERTY_TOKEN_URL)) {
                     assertIsSet(getTokenUrl(), PROPERTY_TOKEN_URL, reasonOauth2);
                 }
@@ -327,9 +359,9 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
                 if (!containsMacro((PROPERTY_CLIENT_SECRET))) {
                     assertIsSet(getClientSecret(), PROPERTY_CLIENT_SECRET, reasonOauth2);
                 }
-                if (!containsMacro(PROPERTY_REFRESH_TOKEN)) {
+                /*if (!containsMacro(PROPERTY_REFRESH_TOKEN)) {
                     assertIsSet(getRefreshToken(), PROPERTY_REFRESH_TOKEN, reasonOauth2);
-                }
+                }*/
                 break;
             case SERVICE_ACCOUNT:
                 String reasonSA = "Service Account is enabled";
@@ -369,10 +401,20 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
 
         switch (authType) {
             case OAUTH2:
-                String accessToken = OAuthUtil.getAccessTokenByRefreshToken(HttpClients.createDefault(), getTokenUrl(),
+            String accessToken = null;
+            if (grantType == GrantType.REFRESH_TOKEN.getValue()) {
+                accessToken = OAuthUtil.getAccessTokenByRefreshToken(HttpClients.createDefault(), getTokenUrl(),
+                                               getClientId(), getClientSecret(), getRefreshToken());
+                LOGGER.debug("Access token by Refresh_token Grant type , {}", accessToken);
+            } else if (grantType == GrantType.CLIENT_CREDENTIALS.getValue()) {
+                accessToken = OAuthUtil.getAccessTokenByClientCredentials(HttpClients.createDefault(),
+                                                     getTokenUrl(), getClientId(), getClientSecret(), getGrantType());
+                LOGGER.debug("Access token by Client_credentials Grant type , {}", accessToken);
+            }
+              /*String accessToken = OAuthUtil.getAccessTokenByRefreshToken(HttpClients.createDefault(), getTokenUrl(),
                         getClientId(), getClientSecret(),
-                        getRefreshToken());
-                return new BasicHeader("Authorization", "Bearer " + accessToken);
+                        getRefreshToken());*/
+            return new BasicHeader("Authorization", "Bearer " + accessToken);
             case SERVICE_ACCOUNT:
                 // get accessToken from service account
                 accessToken = OAuthUtil.getAccessTokenByServiceAccount(this);
