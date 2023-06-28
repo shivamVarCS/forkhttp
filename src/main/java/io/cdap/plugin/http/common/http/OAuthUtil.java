@@ -109,7 +109,7 @@ public class OAuthUtil {
     URI uri;
     try {
       uri = new URIBuilder(tokenUrl)
-        .setParameter("grant_type", String.valueOf(grantType)).build();
+        .setParameter("grant_type", grantType.getValue()).build();
     } catch (URISyntaxException e) {
       throw new IllegalArgumentException("Failed to build token URI for OAuth2", e);
     }

@@ -402,11 +402,11 @@ public abstract class BaseHttpConfig extends ReferencePluginConfig {
         switch (authType) {
             case OAUTH2:
             String accessToken = null;
-            if (grantType == GrantType.REFRESH_TOKEN.getValue()) {
+            if (grantType.equals(GrantType.REFRESH_TOKEN.getValue())) {
                 accessToken = OAuthUtil.getAccessTokenByRefreshToken(HttpClients.createDefault(), getTokenUrl(),
                                                getClientId(), getClientSecret(), getRefreshToken());
                 LOGGER.debug("Access token by Refresh_token Grant type , {}", accessToken);
-            } else if (grantType == GrantType.CLIENT_CREDENTIALS.getValue()) {
+            } else if (grantType.equals(GrantType.CLIENT_CREDENTIALS.getValue())) {
                 accessToken = OAuthUtil.getAccessTokenByClientCredentials(HttpClients.createDefault(),
                                                      getTokenUrl(), getClientId(), getClientSecret(), getGrantType());
                 LOGGER.debug("Access token by Client_credentials Grant type , {}", accessToken);
